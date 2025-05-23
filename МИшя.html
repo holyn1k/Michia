@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Приключение Миши</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background: linear-gradient(to bottom, #cceeff, #ffffff);
+      overflow: hidden;
+    }
+    .screen {
+      display: none;
+      text-align: center;
+      background: white;
+      padding: 40px;
+      border-radius: 16px;
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.2);
+      max-width: 600px;
+      margin: auto;
+      margin-top: 10vh;
+    }
+    .active {
+      display: block;
+    }
+    h1, h2 {
+      margin-bottom: 30px;
+    }
+    button {
+      display: block;
+      font-size: 18px;
+      padding: 10px 25px;
+      margin: 10px auto;
+      border: none;
+      border-radius: 10px;
+      background-color: #4CAF50;
+      color: white;
+      cursor: pointer;
+      width: 200px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    p {
+      margin: 20px 0;
+      font-size: 16px;
+    }
+    canvas {
+      display: none;
+      background: #dfffdc;
+      border: 2px solid #333;
+    }
+    #joystick {
+      display: none;
+      position: absolute;
+      bottom: 40px;
+      left: 40px;
+      width: 100px;
+      height: 100px;
+      background: rgba(0, 0, 0, 0.1);
+      border-radius: 50%;
+      touch-action: none;
+    }
+    #stick {
+      width: 40px;
+      height: 40px;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 50%;
+      position: absolute;
+      top: 30px;
+      left: 30px;
+    }
+    .speech {
+      position: absolute;
+      background: white;
+      border: 2px solid black;
+      padding: 10px 15px;
+      border-radius: 10px;
+      font-size: 20px;
+      max-width: 300px;
+      pointer-events: none;
+      z-index: 10;
+      box-shadow: 5px 5px 0px black;
+    }
+  </style>
+</head>
+<body>
+  <div id="menu" class="screen active">
+    <h1>Приключение Миши</h1>
+    <button onclick="startNewGame()">Играть сначала</button>
+    <button onclick="continueGame()">Играть</button>
+    <button onclick="loadGame()">Загрузить</button>
+    <button onclick="aboutGame()">О игре</button>
+  </div>
+
+  <div id="story" class="screen">
+    <h2>Сюжет</h2>
+    <p>Ты — 12-летний парень Миша, единственный, кто прошёл в финал конкурса. Твоя цель — собрать голоса, чтобы выиграть айфон!</p>
+    <p>Недавно Тимур, по слухам использовавший накрутку, обогнал тебя. А ещё была девочка, которую ты уже обошёл, прося прохожих голосовать за тебя в парке.</p>
+    <p>Модераторы списали половину голосов у всех. Сейчас счёт такой:<br>Адиля — 214<br>Миша (ты) — 240<br>Тимур — 315</p>
+    <p>До конца конкурса — 2 дня! Твоя задача — найти новых людей и собрать больше голосов. Побежим!</p>
+    <button onclick="goToControls()">Продолжить</button>
+  </div>
+
+  <div id="controls" class="screen">
+    <h2>Выбери устройство</h2>
+    <button onclick="startGame('phone')">Телефон</button>
+    <button onclick="startGame('pc')">Компьютер/Ноутбук</button>
+  </div>
+
+  <canvas id="game" width="1000" height="400"></canvas>
+  <div id="joystick">
+    <div id="stick"></div>
+  </div>
+  <div id="speech" class="speech" style="display:none;"></div>
+
+  <script>
+    let currentDevice = 'pc';
+    let canvas = document.getElementById("game");
+    let ctx = canvas.getContext("2d");
+    let keys = {};
+    let joystick = document.getElementById("joystick");
+    let stick = document.getElementById("stick");
+    let speechBox = document.getElementById("speech");
+
+    let player = { x: 50, y: 300, width: 30, height: 30, speed: 4, color: '#ff4444', vy: 0, onGround: false };
+    let gravity = 0.5;
+    let groundY = 350;
+    let npcs = [];
+    for (let i = 0; i < 10; i++) {
+      npcs.push({ x: 400 + i * 300, y: 320, width: 20, height: 30, color: '#' + Math.floor(Math.random()*16777215).toString(16), talked: false });
+    }
+
+    let score = 240;
+    let totalTime = 2 * 24 * 60 * 60;
+    let startTime = Date.now();
+
+    function showSpeech(text, x, y) {
+      speechBox.innerText = text;
+      speechBox.style.left = (x - 50) + 'px';
+      speechBox.style.top = (y - 60) + 'px';
+      speechBox.style.display = 'block';
+      setTimeout(() => { speechBox.style.display = 'none'; }, 2000);
+    }
+
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(screen => screen.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+    }
+
+    function startNewGame() {
+      showScreen('story');
+    }
+
+    function continueGame() {
+      alert('Пока продолжение игры не сохранено. Начни заново.');
+    }
+
+    function loadGame() {
+      alert('Загрузка пока недоступна.');
+    }
+
+    function aboutGame() {
+      alert('2D игра о Мише, который собирает голоса, чтобы выиграть айфон. Прыгай, бегай, разговаривай с людьми.');
+    }
+
+    function goToControls() {
+      showScreen('controls');
+    }
+
+    let joystickData = { dx: 0 };
+    function startGame(device) {
+      currentDevice = device;
+      document.querySelectorAll('.screen').forEach(screen => screen.classList.remove('active'));
+      canvas.style.display = 'block';
+      if (device === 'phone') joystick.style.display = 'block';
+      window.requestAnimationFrame(gameLoop);
+    }
+
+    function setupJoystick() {
+      let origin = { x: 0, y: 0 };
+      let dragging = false;
+
+      joystick.addEventListener("touchstart", function(e) {
+        dragging = true;
+        origin.x = e.touches[0].clientX;
+        origin.y = e.touches[0].clientY;
+      });
+
+      joystick.addEventListener("touchmove", function(e) {
+        if (!dragging) return;
+        let dx = e.touches[0].clientX - origin.x;
+        joystickData.dx = dx;
+        stick.style.left = 30 + dx * 0.2 + "px";
+      });
+
+      joystick.addEventListener("touchend", function() {
+        dragging = false;
+        joystickData.dx = 0;
+        stick.style.left = "30px";
+      });
+    }
+
+    setupJoystick();
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      let camX = Math.max(0, player.x - canvas.width / 2);
+      ctx.translate(-camX, 0);
+
+      ctx.fillStyle = "#aaddff";
+      ctx.fillRect(camX, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#88cc66";
+      ctx.fillRect(camX, groundY, canvas.width, 50);
+
+      for (let i = 0; i < 10; i++) {
+        let x = 100 + i * 300;
+        ctx.fillStyle = "#b5651d";
+        ctx.fillRect(x, 270, 80, 80);
+        ctx.fillStyle = "#228822";
+        ctx.beginPath();
+        ctx.arc(x + 40, 240, 40, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = player.color;
+      ctx.fillRect(player.x, player.y, player.width, player.height);
+
+      player.y += player.vy;
+      player.vy += gravity;
+      if (player.y + player.height >= groundY) {
+        player.y = groundY - player.height;
+        player.vy = 0;
+        player.onGround = true;
+      } else {
+        player.onGround = false;
+      }
+
+      if (player.y > canvas.height) {
+        player.x = 50;
+        player.y = 300;
+      }
+
+      if (keys["ArrowLeft"] || keys["a"] || (currentDevice === 'phone' && joystickData.dx < -10)) player.x -= player.speed;
+      if (keys["ArrowRight"] || keys["d"] || (currentDevice === 'phone' && joystickData.dx > 10)) player.x += player.speed;
+      if ((keys[" "] || keys["w"] || keys["ArrowUp"]) && player.onGround) player.vy = -10;
+
+      npcs.forEach(npc => {
+        ctx.fillStyle = npc.color;
+        ctx.fillRect(npc.x, npc.y, npc.width, npc.height);
+        if (!npc.talked && Math.abs(player.x - npc.x) < 30) {
+          npc.talked = true;
+          if (Math.random() < 0.6) {
+            let points = Math.floor(Math.random() * 25) + 5;
+            score += points;
+            showSpeech("Конечно, голосую за тебя!", npc.x - camX, npc.y);
+          } else {
+            showSpeech("Извини, я голосую за другого.", npc.x - camX, npc.y);
+          }
+        }
+      });
+
+      ctx.fillStyle = '#000';
+      ctx.font = '16px sans-serif';
+      ctx.fillText("Голоса: " + score, camX + 10, 20);
+      let elapsed = Math.floor((Date.now() - startTime) / 1000);
+      let remaining = Math.max(0, totalTime - elapsed);
+      let hrs = Math.floor(remaining / 3600);
+      let mins = Math.floor((remaining % 3600) / 60);
+      let secs = remaining % 60;
+      ctx.fillText(`Осталось: ${hrs}ч ${mins}м ${secs}с`, camX + 10, 40);
+
+      ctx.translate(camX, 0);
+      window.requestAnimationFrame(gameLoop);
+    }
+
+    window.addEventListener("keydown", e => keys[e.key] = true);
+    window.addEventListener("keyup", e => keys[e.key] = false);
+  </script>
+</body>
+</html>
+
+<style>
+
+</style>
+<script>
+
+</script>
